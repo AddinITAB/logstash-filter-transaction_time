@@ -1,3 +1,14 @@
+# About
+This plugin is a substitute for the logstash-filter-elapsed plugin. 
+The elapsed-plugin requires a transaction to be executed in a specified order and then decorates the last part of the transaction (or creates a new event) with the elapsed time.
+The order of which the parts of a transaction is received cannot always be predicted when using multiple workers for a pipeline.
+Hence the need for this plugin.
+This plugin, like elapsed, uses a unique identifier to pair events in a transaction.
+But instead of defining a start and an end for a transaction - only the unique identifier is used. 
+This of course has some implications. The biggest one not being able to decorate the last part of the transaction since it may or may not be the same type of event.
+Instead the transaction time is stored together with the unique identifier. Either in the same or another index.
+
+
 # Logstash Plugin
 
 This is a plugin for [Logstash](https://github.com/elastic/logstash).
