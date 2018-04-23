@@ -32,10 +32,14 @@ class LogStash::Filters::TransactionTime < LogStash::Filters::Base
     # Add instance variables 
     @transactions = Hash.new
     @mutex = Mutex.new
+    @@timestampTag = @timestamp_tag
   end # def register
 
   def transactions
       @transactions
+  end
+  def self.timestampTag
+    @@timestampTag
   end
 
   public
@@ -50,18 +54,13 @@ class LogStash::Filters::TransactionTime < LogStash::Filters::Base
           @transactions[uid] = LogStash::Filters::TransactionTime::Transaction.new(event)
         else
           @transactions[uid].addSecond(event)
-          
+
           #@transactions.delete(uid)
         end
 
     end
 
     event.set("uid_field", @uid_field)
-    if @timestamp_tag
-      # Replace the event message with our message as configured in the
-      # config file.
-      event.set("timestamp_tag", @timestamp_tag)
-    end
 
     # filter_matched should go in the last line of our successful code
     filter_matched(event)
@@ -83,7 +82,10 @@ class LogStash::Filters::TransactionTime::Transaction
   end
 
   def calculateDiff()
-    elapsed = @b.get("@timestamp") - @a.get("@timestamp")
+    elapsed = @b.get(LogStash::Filters::TransactionTime.timestampTag) - @a.get(LogStash::Filters::TransactionTime.timestampTag)
+    if (@b.get(LogStash::Filters::TransactionTime.timestampTag) < @a.get(LogStash::Filters::TransactionTime.timestampTag))
+      elapsed = @a.get(LogStash::Filters::TransactionTime.timestampTag) - @b.get(LogStash::Filters::TransactionTime.timestampTag)
+    end
     return elapsed
   end
 end

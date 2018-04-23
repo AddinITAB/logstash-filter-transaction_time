@@ -17,9 +17,9 @@ describe LogStash::Filters::TransactionTime do
     CONFIG
     end
 
-    sample("timestamp_tag" => "some text") do
+    sample("timestamp_tag" => "testing") do
       expect(subject).to include("timestamp_tag")
-      expect(subject.get('timestamp_tag')).to eq('@timestamp')
+      expect(subject.get('timestamp_tag')).to eq('testing')
     end
 
     sample("uid_field" => "some text") do
@@ -47,6 +47,7 @@ describe LogStash::Filters::TransactionTime do
   context "Testing Hash with UID" do
     describe "Receiving" do
       uid = "D7AF37D9-4F7F-4EFC-B481-06F65F75E8C0"
+      uid2 = "5DE49829-5CD3-4103-8062-781AC63BE4F5"
       describe "one event" do
         it "records the transaction" do
           @filter.filter(event("message" => "Log message", UID_FIELD => uid))
@@ -63,6 +64,17 @@ describe LogStash::Filters::TransactionTime do
           insist { @filter.transactions.size } == 1
           insist { @filter.transactions[uid].a } != nil
           insist { @filter.transactions[uid].b } != nil
+        end
+      end
+      describe "and events with different UID" do
+        it "there is now two transaction" do
+          @filter.filter(event("message" => "Log message", UID_FIELD => uid))
+          @filter.filter(event("message" => "Log message", UID_FIELD => uid2))
+          insist { @filter.transactions.size } == 2
+          insist { @filter.transactions[uid].a } != nil
+          insist { @filter.transactions[uid].b } == nil
+          insist { @filter.transactions[uid2].a } != nil
+          insist { @filter.transactions[uid2].b } == nil
         end
       end
     end
@@ -83,6 +95,24 @@ describe LogStash::Filters::TransactionTime do
         it "the TransactionTime have been calculated with ms presicion" do
           @filter.filter(event("message" => "Log message", UID_FIELD => uid, "@timestamp" => "2018-04-22T09:46:21.001+0100"))
           @filter.filter(event("message" => "Log message", UID_FIELD => uid, "@timestamp" => "2018-04-22T09:46:22.000+0100"))
+          insist { @filter.transactions.size } == 1
+          insist { @filter.transactions[uid].a } != nil
+          insist { @filter.transactions[uid].b } != nil
+          insist { @filter.transactions[uid].diff } == 0.999
+        end
+      end
+      describe "two events with the same UID in REVERSED cronological order" do
+        it "the TransactionTime have been calculated with second presicion" do
+          @filter.filter(event("message" => "Log message", UID_FIELD => uid, "@timestamp" => "2018-04-22T09:46:22.000+0100"))
+          @filter.filter(event("message" => "Log message", UID_FIELD => uid, "@timestamp" => "2018-04-22T09:46:21.000+0100"))
+          insist { @filter.transactions.size } == 1
+          insist { @filter.transactions[uid].a } != nil
+          insist { @filter.transactions[uid].b } != nil
+          insist { @filter.transactions[uid].diff } == 1.0
+        end
+        it "the TransactionTime have been calculated with ms presicion" do
+          @filter.filter(event("message" => "Log message", UID_FIELD => uid, "@timestamp" => "2018-04-22T09:46:22.000+0100"))
+          @filter.filter(event("message" => "Log message", UID_FIELD => uid, "@timestamp" => "2018-04-22T09:46:21.001+0100"))
           insist { @filter.transactions.size } == 1
           insist { @filter.transactions[uid].a } != nil
           insist { @filter.transactions[uid].b } != nil
