@@ -30,19 +30,70 @@ class LogStash::Filters::TransactionTime < LogStash::Filters::Base
   public
   def register
     # Add instance variables 
+    @transactions = Hash.new
+    @mutex = Mutex.new
   end # def register
+
+  def transactions
+      @transactions
+  end
 
   public
   def filter(event)
+    
+    uid = event.get(@uid_field)
+    #return if uid.nil?
 
+    @logger.debug("Received UID", uid: uid)
+    @mutex.synchronize do
+        if(!@transactions.has_key?(uid))
+          @transactions[uid] = LogStash::Filters::TransactionTime::Transaction.new(event)
+        else
+          @transactions[uid].addSecond(event)
+          
+          #@transactions.delete(uid)
+        end
+
+    end
+
+    event.set("uid_field", @uid_field)
     if @timestamp_tag
       # Replace the event message with our message as configured in the
       # config file.
       event.set("timestamp_tag", @timestamp_tag)
-      event.set("uid_field", @uid_field)
     end
 
     # filter_matched should go in the last line of our successful code
     filter_matched(event)
   end # def filter
 end # class LogStash::Filters::TransactionTime
+
+
+class LogStash::Filters::TransactionTime::Transaction
+  attr_accessor :a, :b, :age, :diff
+
+  def initialize(firstEvent)
+    @a = firstEvent
+    @age = 0
+  end
+
+  def addSecond(secondEvent)
+    @b = secondEvent
+    @diff = calculateDiff()
+  end
+
+  def calculateDiff()
+    elapsed = @b.get("@timestamp") - @a.get("@timestamp")
+    return elapsed
+  end
+end
+
+
+#Hashmap of transactions. Key: UID, Value: Transaction
+#Transaction. Element a, Element b, age
+#Element. event
+
+
+#Look for transaction UID in hash.
+# Not there? Create one. Set age = now. Add first element to transaction
+# There? Add second element to transaction, calculate diff.
