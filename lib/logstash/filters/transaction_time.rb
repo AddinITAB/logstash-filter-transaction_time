@@ -19,8 +19,12 @@ class LogStash::Filters::TransactionTime < LogStash::Filters::Base
   #
   config_name "transaction_time"
   
-  # Replace the message with this value.
-  config :message, :validate => :string, :default => "Hello World!"
+  # The name of the UID-field used to identify transaction-pairs
+  config :uid_field, :validate => :string, :required => true
+  # The amount of time (in seconds) before a transaction is dropped. Defaults to 5 minutes
+  config :timout, :validate => :number, :default => 300
+  # What tag to use as timestamp when calculating the elapsed transaction time. Defaults to @timestamp
+  config :timestamp_tag, :validate => :string, :default => "@timestamp"
   
 
   public
@@ -31,10 +35,11 @@ class LogStash::Filters::TransactionTime < LogStash::Filters::Base
   public
   def filter(event)
 
-    if @message
+    if @timestamp_tag
       # Replace the event message with our message as configured in the
       # config file.
-      event.set("message", @message)
+      event.set("timestamp_tag", @timestamp_tag)
+      event.set("uid_field", @uid_field)
     end
 
     # filter_matched should go in the last line of our successful code

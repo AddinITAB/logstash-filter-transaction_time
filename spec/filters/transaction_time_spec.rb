@@ -7,15 +7,21 @@ describe LogStash::Filters::TransactionTime do
     let(:config) do <<-CONFIG
       filter {
         transaction_time {
-          message => "Hello World"
+          timestamp_tag => "@timestamp"
+          uid_field => "uid"
         }
       }
     CONFIG
     end
 
-    sample("message" => "some text") do
-      expect(subject).to include("message")
-      expect(subject.get('message')).to eq('Hello World')
+    sample("timestamp_tag" => "some text") do
+      expect(subject).to include("timestamp_tag")
+      expect(subject.get('timestamp_tag')).to eq('@timestamp')
+    end
+
+    sample("uid_field" => "some text") do
+      expect(subject).to include("uid_field")
+      expect(subject.get('uid_field')).to eq('uid')
     end
   end
 end
