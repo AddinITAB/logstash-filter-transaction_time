@@ -59,7 +59,7 @@ describe LogStash::Filters::TransactionTime do
         end
       end
       describe "and events with the same UID" do
-        it "the transaction is completed and removed" do
+        it "completes and removes transaction" do
           @filter.filter(event("message" => "Log message", UID_FIELD => uid))
           @filter.filter(event("message" => "Log message", UID_FIELD => uid))
           insist { @filter.transactions.size } == 0
@@ -67,7 +67,7 @@ describe LogStash::Filters::TransactionTime do
         end
       end
       describe "and events with different UID" do
-        it "there is now two transaction" do
+        it "increases the number of transactions to two" do
           @filter.filter(event("message" => "Log message", UID_FIELD => uid))
           @filter.filter(event("message" => "Log message", UID_FIELD => uid2))
           insist { @filter.transactions.size } == 2
@@ -84,7 +84,7 @@ describe LogStash::Filters::TransactionTime do
     describe "Receiving" do
       uid = "D7AF37D9-4F7F-4EFC-B481-06F65F75E8CC"
       describe "two events with the same UID in cronological order" do
-        it "the TransactionTime have been calculated with second presicion" do
+        it "calculates TransactionTime with second presicion" do
           @filter.filter(event("message" => "Log message", UID_FIELD => uid, "@timestamp" => "2018-04-22T09:46:21.000+0100"))
           @filter.filter(event("message" => "Log message", UID_FIELD => uid, "@timestamp" => "2018-04-22T09:46:22.000+0100")) do | new_event |
             insist { new_event } != nil
@@ -94,7 +94,7 @@ describe LogStash::Filters::TransactionTime do
           insist { @filter.transactions.size } == 0
           insist { @filter.transactions[uid] } == nil
         end
-        it "the TransactionTime have been calculated with ms presicion" do
+        it "calculates TransactionTime with ms presicion" do
           @filter.filter(event("message" => "Log message", UID_FIELD => uid, "@timestamp" => "2018-04-22T09:46:21.001+0100"))
           @filter.filter(event("message" => "Log message", UID_FIELD => uid, "@timestamp" => "2018-04-22T09:46:22.000+0100")) do | new_event |
             insist { new_event } != nil
@@ -106,7 +106,7 @@ describe LogStash::Filters::TransactionTime do
         end
       end
       describe "two events with the same UID in REVERSED cronological order" do
-        it "the TransactionTime have been calculated with second presicion" do
+        it "calculates TransactionTime with second presicion" do
           @filter.filter(event("message" => "Log message", UID_FIELD => uid, "@timestamp" => "2018-04-22T09:46:22.000+0100"))
           @filter.filter(event("message" => "Log message", UID_FIELD => uid, "@timestamp" => "2018-04-22T09:46:21.000+0100"))do | new_event |
             insist { new_event } != nil
@@ -116,7 +116,7 @@ describe LogStash::Filters::TransactionTime do
           insist { @filter.transactions.size } == 0
           insist { @filter.transactions[uid] } == nil
         end
-        it "the TransactionTime have been calculated with ms presicion" do
+        it "calculates TransactionTime with ms presicion" do
           @filter.filter(event("message" => "Log message", UID_FIELD => uid, "@timestamp" => "2018-04-22T09:46:22.000+0100"))
           @filter.filter(event("message" => "Log message", UID_FIELD => uid, "@timestamp" => "2018-04-22T09:46:21.001+0100")) do | new_event |
             insist { new_event } != nil
@@ -134,7 +134,7 @@ describe LogStash::Filters::TransactionTime do
     uid = "D7AF37D9-4F7F-4EFC-B481-06F65F75E8CC"
     uid2 = "C27BBC4C-6456-4581-982E-7497B4C7E754"
     describe "Call flush enough times" do
-      it "so that all old transactions are flushed" do
+      it "flushes all old transactions" do
         @filter.filter(event("message" => "Log message", UID_FIELD => uid, "@timestamp" => "2018-04-22T09:46:22.000+0100"))
         insist { @filter.transactions.size } == 1
         @filter.filter(event("message" => "Log message", UID_FIELD => uid2, "@timestamp" => "2018-04-22T09:46:22.000+0100"))
@@ -146,7 +146,7 @@ describe LogStash::Filters::TransactionTime do
         @filter.flush()
         insist { @filter.transactions.size } == 0
       end
-      it "but not newer transactions" do
+      it "does not flush newer transactions" do
         @filter.filter(event("message" => "Log message", UID_FIELD => uid, "@timestamp" => "2018-04-22T09:46:22.000+0100"))
         insist { @filter.transactions.size } == 1
         ((TIMEOUT/5)-1).times do
