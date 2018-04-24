@@ -40,7 +40,7 @@ describe LogStash::Filters::TransactionTime do
   end
 
   def setup_filter(config = {})
-    @config = {"uid_field" => UID_FIELD, "timeout" => TIMEOUT}
+    @config = {"uid_field" => UID_FIELD, "timeout" => TIMEOUT, "attach_event" => 'first'}
     @config.merge!(config)
     @filter = LogStash::Filters::TransactionTime.new(@config)
     @filter.register
@@ -56,7 +56,7 @@ describe LogStash::Filters::TransactionTime do
           #insist { @filter.events[uid] } == "HEJ"
           insist { @filter.transactions.size } == 1
           insist { @filter.transactions[uid].firstEvent } != nil
-          insist { @filter.transactions[uid].secondEvent } == nil
+          insist { @filter.transactions[uid].lastEvent } == nil
         end
       end
       describe "and events with the same UID" do
@@ -73,9 +73,9 @@ describe LogStash::Filters::TransactionTime do
           @filter.filter(event("message" => "Log message", UID_FIELD => uid2))
           insist { @filter.transactions.size } == 2
           insist { @filter.transactions[uid].firstEvent } != nil
-          insist { @filter.transactions[uid].secondEvent } == nil
+          insist { @filter.transactions[uid].lastEvent } == nil
           insist { @filter.transactions[uid2].firstEvent } != nil
-          insist { @filter.transactions[uid2].secondEvent } == nil
+          insist { @filter.transactions[uid2].lastEvent } == nil
         end
       end
     end
