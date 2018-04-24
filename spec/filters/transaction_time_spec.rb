@@ -225,4 +225,23 @@ describe LogStash::Filters::TransactionTime do
     end
   end
 
+
+  context "Testing attach_event." do
+    uid = "D7AF37D9-4F7F-4EFC-B481-06F65F75E8CC"
+    uid2 = "58C8B705-49C5-4269-92D9-2C959599534C"
+    describe "create tests for attach_event" do
+      describe "only two tagged with specified 'filter_tag'" do
+        it "registers only two transactions" do
+          config = {"filter_tag" => 'transaction'}
+          @config.merge!(config)
+
+          @filter = LogStash::Filters::TransactionTime.new(@config)
+          @filter.register
+
+          insist { true } == false
+        end
+      end
+    end
+  end
+
 end
