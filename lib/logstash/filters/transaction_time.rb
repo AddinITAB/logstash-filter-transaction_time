@@ -133,28 +133,28 @@ end # class LogStash::Filters::TransactionTime
 
 
 class LogStash::Filters::TransactionTime::Transaction
-  attr_accessor :a, :b,:uid, :age, :diff
+  attr_accessor :firstEvent, :secondEvent,:uid, :age, :diff
 
   def initialize(firstEvent, uid)
-    @a = firstEvent
+    @firstEvent = firstEvent
     @uid = uid
     @age = 0
   end
 
   def addSecond(secondEvent)
-    @b = secondEvent
+    @secondEvent = secondEvent
     @diff = calculateDiff()
   end
 
   #Gets the first (based on timestamp) event
   def getOldest() 
-    if @a==nil || @b==nil
+    if @firstEvent==nil || @secondEvent==nil
       return nil
     end
-    if(@a.get(LogStash::Filters::TransactionTime.timestampTag) < @b.get(LogStash::Filters::TransactionTime.timestampTag))
-      return @a
+    if(@firstEvent.get(LogStash::Filters::TransactionTime.timestampTag) < @secondEvent.get(LogStash::Filters::TransactionTime.timestampTag))
+      return @firstEvent
     else
-      return @b
+      return @secondEvent
     end
   end
 
@@ -164,13 +164,13 @@ class LogStash::Filters::TransactionTime::Transaction
 
   #Gets the last (based on timestamp) event
   def getNewest() 
-    if @a==nil || @b==nil
+    if @firstEvent==nil || @secondEvent==nil
       return nil
     end
-    if(@a.get(LogStash::Filters::TransactionTime.timestampTag) > @b.get(LogStash::Filters::TransactionTime.timestampTag))
-      return @a
+    if(@firstEvent.get(LogStash::Filters::TransactionTime.timestampTag) > @secondEvent.get(LogStash::Filters::TransactionTime.timestampTag))
+      return @firstEvent
     else
-      return @b
+      return @secondEvent
     end
   end
 
@@ -179,7 +179,7 @@ class LogStash::Filters::TransactionTime::Transaction
   end
 
   def calculateDiff()
-    if @a==nil || @b==nil
+    if @firstEvent==nil || @secondEvent==nil
       return nil
     end
 

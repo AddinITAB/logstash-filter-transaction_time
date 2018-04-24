@@ -55,8 +55,8 @@ describe LogStash::Filters::TransactionTime do
           @filter.filter(event("message" => "Log message", UID_FIELD => uid))
           #insist { @filter.events[uid] } == "HEJ"
           insist { @filter.transactions.size } == 1
-          insist { @filter.transactions[uid].a } != nil
-          insist { @filter.transactions[uid].b } == nil
+          insist { @filter.transactions[uid].firstEvent } != nil
+          insist { @filter.transactions[uid].secondEvent } == nil
         end
       end
       describe "and events with the same UID" do
@@ -72,10 +72,10 @@ describe LogStash::Filters::TransactionTime do
           @filter.filter(event("message" => "Log message", UID_FIELD => uid))
           @filter.filter(event("message" => "Log message", UID_FIELD => uid2))
           insist { @filter.transactions.size } == 2
-          insist { @filter.transactions[uid].a } != nil
-          insist { @filter.transactions[uid].b } == nil
-          insist { @filter.transactions[uid2].a } != nil
-          insist { @filter.transactions[uid2].b } == nil
+          insist { @filter.transactions[uid].firstEvent } != nil
+          insist { @filter.transactions[uid].secondEvent } == nil
+          insist { @filter.transactions[uid2].firstEvent } != nil
+          insist { @filter.transactions[uid2].secondEvent } == nil
         end
       end
     end
