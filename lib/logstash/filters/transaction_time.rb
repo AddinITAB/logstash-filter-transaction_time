@@ -11,6 +11,7 @@ class LogStash::Filters::TransactionTime < LogStash::Filters::Base
   HOST_FIELD = "host"
   TRANSACTION_TIME_TAG = "TransactionTime"
   TRANSACTION_TIME_FIELD = "transaction_time"
+  TRANSACTION_UID_FIELD = "transaction_uid"
   TIMESTAMP_START_FIELD = "timestamp_start"
 
   config_name "transaction_time"
@@ -23,7 +24,8 @@ class LogStash::Filters::TransactionTime < LogStash::Filters::Base
   config :timestamp_tag, :validate => :string, :default => "@timestamp"
   # Override the new events timestamp with the oldest or newest timestamp or keep the new one (set when logstash has processed the event)
   config :replace_timestamp, :validate => ['keep', 'oldest', 'newest'], :default => 'keep'
-  
+  # Tag used to identify transactional events. If set, only events tagged with the specified tag attached will be concidered transactions and be processed by the plugin
+  config :filter_tag, :validate => :string
 
   public
   def register
@@ -47,7 +49,9 @@ class LogStash::Filters::TransactionTime < LogStash::Filters::Base
     #return if uid.nil?
 
     @logger.debug("Received UID", uid: uid)
-    @mutex.synchronize do
+
+    if (@filter_tag.nil? || (!event.get("tags").nil? && event.get("tags").include?(@filter_tag)))
+      @mutex.synchronize do
         if(!@transactions.has_key?(uid))
           @transactions[uid] = LogStash::Filters::TransactionTime::Transaction.new(event, uid)
         else #End of transaction
@@ -57,7 +61,7 @@ class LogStash::Filters::TransactionTime < LogStash::Filters::Base
           yield transaction_event if block_given?
           @transactions.delete(uid)
         end
-
+      end
     end
 
     event.set("uid_field", @uid_field)
@@ -106,7 +110,7 @@ class LogStash::Filters::TransactionTime < LogStash::Filters::Base
 
       event.tag(TRANSACTION_TIME_TAG)
       event.set(TRANSACTION_TIME_FIELD, transaction.diff)
-      event.set(@uid_field, transaction.uid)
+      event.set(TRANSACTION_UID_FIELD, transaction.uid)
       event.set(TIMESTAMP_START_FIELD, transaction.getOldestTimestamp())
 
       if(@replace_timestamp.eql?'oldest')
@@ -182,13 +186,3 @@ class LogStash::Filters::TransactionTime::Transaction
     return getNewest().get(LogStash::Filters::TransactionTime.timestampTag) - getOldest().get(LogStash::Filters::TransactionTime.timestampTag)
   end
 end
-
-
-#Hashmap of transactions. Key: UID, Value: Transaction
-#Transaction. Element a, Element b, age
-#Element. event
-
-
-#Look for transaction UID in hash.
-# Not there? Create one. Set age = now. Add first element to transaction
-# There? Add second element to transaction, calculate diff.

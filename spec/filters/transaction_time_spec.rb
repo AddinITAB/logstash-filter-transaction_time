@@ -160,6 +160,7 @@ describe LogStash::Filters::TransactionTime do
       end
     end
   end
+
   context "Testing Timestamp Override." do
     uid = "D7AF37D9-4F7F-4EFC-B481-06F65F75E8CC"
     describe "Two events with the same UID" do
@@ -193,6 +194,32 @@ describe LogStash::Filters::TransactionTime do
             insist { new_event.get("tags").include?("TransactionTime") }
             insist { new_event.get("@timestamp").to_s } == LogStash::Timestamp.parse_iso8601("2018-04-22T09:46:22.100+0100").to_s
           end
+        end
+      end
+    end
+  end
+
+  context "Testing filter_tag." do
+    uid = "D7AF37D9-4F7F-4EFC-B481-06F65F75E8CC"
+    uid2 = "58C8B705-49C5-4269-92D9-2C959599534C"
+    describe "Incoming events with different UID" do
+      describe "only two tagged with specified 'filter_tag'" do
+        it "registers only two transactions" do
+          config = {"filter_tag" => 'transaction'}
+          @config.merge!(config)
+
+          @filter = LogStash::Filters::TransactionTime.new(@config)
+          @filter.register
+
+          insist { @filter.transactions.size } == 0
+          @filter.filter(event("message" => "Log message", UID_FIELD => uid, "@timestamp" => "2018-04-22T09:46:22.000+0100", "tags" => ['transaction']))
+          insist { @filter.transactions.size } == 1
+          @filter.filter(event("message" => "Log message", UID_FIELD => uid2, "@timestamp" => "2018-04-22T09:46:22.100+0100"))
+          insist { @filter.transactions.size } == 1
+          @filter.filter(event("message" => "Log message", UID_FIELD => uid2, "@timestamp" => "2018-04-22T09:46:22.100+0100", "tags" => ['unrelated']))
+          insist { @filter.transactions.size } == 1
+          @filter.filter(event("message" => "Log message", UID_FIELD => uid2, "@timestamp" => "2018-04-22T09:46:22.100+0100", "tags" => ['transaction']))
+          insist { @filter.transactions.size } == 2
         end
       end
     end
