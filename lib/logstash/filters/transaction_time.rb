@@ -109,9 +109,9 @@ class LogStash::Filters::TransactionTime < LogStash::Filters::Base
       event.set(@uid_field, transaction.uid)
       event.set(TIMESTAMP_START_FIELD, transaction.getOldestTimestamp())
 
-      if(@replace_timestamp.eql?'first')
+      if(@replace_timestamp.eql?'oldest')
         event.set("@timestamp", transaction.getOldestTimestamp())
-      elsif (@replace_timestamp.eql?'last')
+      elsif (@replace_timestamp.eql?'newest')
         event.set("@timestamp", transaction.getNewestTimestamp())
       end
           

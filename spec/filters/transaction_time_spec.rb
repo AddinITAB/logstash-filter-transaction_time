@@ -2,6 +2,7 @@
 require_relative '../spec_helper'
 require "logstash/filters/transaction_time"
 
+
 describe LogStash::Filters::TransactionTime do
   UID_FIELD = "uniqueIdField"
   TIMEOUT = 30
@@ -156,6 +157,43 @@ describe LogStash::Filters::TransactionTime do
         insist { @filter.transactions.size } == 2
         @filter.flush()
         insist { @filter.transactions.size } == 1
+      end
+    end
+  end
+  context "Testing Timestamp Override." do
+    uid = "D7AF37D9-4F7F-4EFC-B481-06F65F75E8CC"
+    describe "Two events with the same UID" do
+      describe "When config set to replace_timestamp => oldest" do
+        it "sets the timestamp to the oldest" do
+          config = {"replace_timestamp" => 'oldest'}
+          @config.merge!(config)
+
+          @filter = LogStash::Filters::TransactionTime.new(@config)
+          @filter.register
+
+          @filter.filter(event("message" => "Log message", UID_FIELD => uid, "@timestamp" => "2018-04-22T09:46:22.000+0100"))
+          @filter.filter(event("message" => "Log message", UID_FIELD => uid, "@timestamp" => "2018-04-22T09:46:22.100+0100")) do | new_event |
+            insist { new_event } != nil
+            insist { new_event.get("tags").include?("TransactionTime") }
+            insist { new_event.get("@timestamp").to_s } == LogStash::Timestamp.parse_iso8601("2018-04-22T09:46:22.000+0100").to_s
+          end
+        end
+      end
+      describe "When config set to replace_timestamp => newest" do
+        it "sets the timestamp to the newest" do
+          config = {"replace_timestamp" => 'newest'}
+          @config.merge!(config)
+
+          @filter = LogStash::Filters::TransactionTime.new(@config)
+          @filter.register
+
+          @filter.filter(event("message" => "Log message", UID_FIELD => uid, "@timestamp" => "2018-04-22T09:46:22.000+0100"))
+          @filter.filter(event("message" => "Log message", UID_FIELD => uid, "@timestamp" => "2018-04-22T09:46:22.100+0100")) do | new_event |
+            insist { new_event } != nil
+            insist { new_event.get("tags").include?("TransactionTime") }
+            insist { new_event.get("@timestamp").to_s } == LogStash::Timestamp.parse_iso8601("2018-04-22T09:46:22.100+0100").to_s
+          end
+        end
       end
     end
   end
