@@ -8,21 +8,17 @@ require "logstash/namespace"
 # It is only intended to be used as an .
 class LogStash::Filters::TransactionTime < LogStash::Filters::Base
 
-  # Setting the config_name here is required. This is how you
-  # configure this filter from your Logstash config.
-  #
-  # filter {
-  #    {
-  #     message => "My message..."
-  #   }
-  # }
-  #
+  HOST_FIELD = "host"
+  TRANSACTION_TIME_TAG = "TransactionTime"
+  TRANSACTION_TIME_FIELD = "transaction_time"
+  TIMESTAMP_START_FIELD = "timestamp_start"
+
   config_name "transaction_time"
   
   # The name of the UID-field used to identify transaction-pairs
   config :uid_field, :validate => :string, :required => true
   # The amount of time (in seconds) before a transaction is dropped. Defaults to 5 minutes
-  config :timout, :validate => :number, :default => 300
+  config :timeout, :validate => :number, :default => 300
   # What tag to use as timestamp when calculating the elapsed transaction time. Defaults to @timestamp
   config :timestamp_tag, :validate => :string, :default => "@timestamp"
   
@@ -52,10 +48,12 @@ class LogStash::Filters::TransactionTime < LogStash::Filters::Base
     @mutex.synchronize do
         if(!@transactions.has_key?(uid))
           @transactions[uid] = LogStash::Filters::TransactionTime::Transaction.new(event)
-        else
+        else #End of transaction
           @transactions[uid].addSecond(event)
-
-          #@transactions.delete(uid)
+          transaction_event = new_transactiontime_event(@transactions[uid].diff, uid, @transactions[uid].getFirst().get(timestamp_tag))
+          filter_matched(transaction_event)
+          yield transaction_event if block_given?
+          @transactions.delete(uid)
         end
 
     end
@@ -65,7 +63,60 @@ class LogStash::Filters::TransactionTime < LogStash::Filters::Base
     # filter_matched should go in the last line of our successful code
     filter_matched(event)
   end # def filter
+
+
+  # The method is invoked by LogStash every 5 seconds.
+  def flush(options = {})
+    expired_elements = []
+
+    @mutex.synchronize do
+      increment_age_by(5)
+      expired_elements = remove_expired_elements()
+    end
+
+    #return create_expired_events_from(expired_elements)
+  end
+
+  private
+  def increment_age_by(seconds)
+    @transactions.each_pair do |key, transaction|
+      transaction.age += seconds
+    end
+  end
+
+  # Remove the expired "start events" from the internal
+  # buffer and return them.
+  def remove_expired_elements()
+    expired = []
+    @transactions.delete_if do |key, transaction|
+      if(transaction.age >= @timeout)
+        expired << transaction
+        next true
+      end
+      next false
+    end
+    return expired
+  end
+
+  def new_transactiontime_event(transaction_time, uid, timestamp_start)
+      event = LogStash::Event.new
+      event.set(HOST_FIELD, Socket.gethostname)
+
+      event.tag(TRANSACTION_TIME_TAG)
+      event.set(TRANSACTION_TIME_FIELD, transaction_time)
+      event.set(@uid_field, uid)
+      event.set(TIMESTAMP_START_FIELD, timestamp_start)
+
+      return event
+  end
+
+
 end # class LogStash::Filters::TransactionTime
+
+
+
+
+
 
 
 class LogStash::Filters::TransactionTime::Transaction
@@ -81,12 +132,36 @@ class LogStash::Filters::TransactionTime::Transaction
     @diff = calculateDiff()
   end
 
-  def calculateDiff()
-    elapsed = @b.get(LogStash::Filters::TransactionTime.timestampTag) - @a.get(LogStash::Filters::TransactionTime.timestampTag)
-    if (@b.get(LogStash::Filters::TransactionTime.timestampTag) < @a.get(LogStash::Filters::TransactionTime.timestampTag))
-      elapsed = @a.get(LogStash::Filters::TransactionTime.timestampTag) - @b.get(LogStash::Filters::TransactionTime.timestampTag)
+  #Gets the first (based on timestamp) event
+  def getFirst() 
+    if @a==nil || @b==nil
+      return nil
     end
-    return elapsed
+    if(@a.get(LogStash::Filters::TransactionTime.timestampTag) < @b.get(LogStash::Filters::TransactionTime.timestampTag))
+      return @a
+    else
+      return @b
+    end
+  end
+
+  #Gets the last (based on timestamp) event
+  def getLast() 
+    if @a==nil || @b==nil
+      return nil
+    end
+    if(@a.get(LogStash::Filters::TransactionTime.timestampTag) > @b.get(LogStash::Filters::TransactionTime.timestampTag))
+      return @a
+    else
+      return @b
+    end
+  end
+
+  def calculateDiff()
+    if @a==nil || @b==nil
+      return nil
+    end
+
+    return getLast().get(LogStash::Filters::TransactionTime.timestampTag) - getFirst().get(LogStash::Filters::TransactionTime.timestampTag)
   end
 end
 

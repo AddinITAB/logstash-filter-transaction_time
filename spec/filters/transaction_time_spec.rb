@@ -4,6 +4,7 @@ require "logstash/filters/transaction_time"
 
 describe LogStash::Filters::TransactionTime do
   UID_FIELD = "uniqueIdField"
+  TIMEOUT = 30
 
 
   describe "Set to Hello World" do
@@ -38,13 +39,13 @@ describe LogStash::Filters::TransactionTime do
   end
 
   def setup_filter(config = {})
-    @config = {"uid_field" => UID_FIELD}
+    @config = {"uid_field" => UID_FIELD, "timeout" => TIMEOUT}
     @config.merge!(config)
     @filter = LogStash::Filters::TransactionTime.new(@config)
     @filter.register
   end
 
-  context "Testing Hash with UID" do
+  context "Testing Hash with UID. " do
     describe "Receiving" do
       uid = "D7AF37D9-4F7F-4EFC-B481-06F65F75E8C0"
       uid2 = "5DE49829-5CD3-4103-8062-781AC63BE4F5"
@@ -58,12 +59,11 @@ describe LogStash::Filters::TransactionTime do
         end
       end
       describe "and events with the same UID" do
-        it "there is still one transaction" do
+        it "the transaction is completed and removed" do
           @filter.filter(event("message" => "Log message", UID_FIELD => uid))
           @filter.filter(event("message" => "Log message", UID_FIELD => uid))
-          insist { @filter.transactions.size } == 1
-          insist { @filter.transactions[uid].a } != nil
-          insist { @filter.transactions[uid].b } != nil
+          insist { @filter.transactions.size } == 0
+          insist { @filter.transactions[uid] } == nil
         end
       end
       describe "and events with different UID" do
@@ -80,45 +80,84 @@ describe LogStash::Filters::TransactionTime do
     end
   end
 
-  context "Testing TransactionTime" do
+  context "Testing TransactionTime. " do
     describe "Receiving" do
       uid = "D7AF37D9-4F7F-4EFC-B481-06F65F75E8CC"
       describe "two events with the same UID in cronological order" do
         it "the TransactionTime have been calculated with second presicion" do
           @filter.filter(event("message" => "Log message", UID_FIELD => uid, "@timestamp" => "2018-04-22T09:46:21.000+0100"))
-          @filter.filter(event("message" => "Log message", UID_FIELD => uid, "@timestamp" => "2018-04-22T09:46:22.000+0100"))
-          insist { @filter.transactions.size } == 1
-          insist { @filter.transactions[uid].a } != nil
-          insist { @filter.transactions[uid].b } != nil
-          insist { @filter.transactions[uid].diff } == 1.0
+          @filter.filter(event("message" => "Log message", UID_FIELD => uid, "@timestamp" => "2018-04-22T09:46:22.000+0100")) do | new_event |
+            insist { new_event } != nil
+            insist { new_event.get("tags").include?("TransactionTime") }
+            insist { new_event.get("transaction_time") } == 1.0
+          end
+          insist { @filter.transactions.size } == 0
+          insist { @filter.transactions[uid] } == nil
         end
         it "the TransactionTime have been calculated with ms presicion" do
           @filter.filter(event("message" => "Log message", UID_FIELD => uid, "@timestamp" => "2018-04-22T09:46:21.001+0100"))
-          @filter.filter(event("message" => "Log message", UID_FIELD => uid, "@timestamp" => "2018-04-22T09:46:22.000+0100"))
-          insist { @filter.transactions.size } == 1
-          insist { @filter.transactions[uid].a } != nil
-          insist { @filter.transactions[uid].b } != nil
-          insist { @filter.transactions[uid].diff } == 0.999
+          @filter.filter(event("message" => "Log message", UID_FIELD => uid, "@timestamp" => "2018-04-22T09:46:22.000+0100")) do | new_event |
+            insist { new_event } != nil
+            insist { new_event.get("tags").include?("TransactionTime") }
+            insist { new_event.get("transaction_time") } == 0.999
+          end
+          insist { @filter.transactions.size } == 0
+          insist { @filter.transactions[uid] } == nil
         end
       end
       describe "two events with the same UID in REVERSED cronological order" do
         it "the TransactionTime have been calculated with second presicion" do
           @filter.filter(event("message" => "Log message", UID_FIELD => uid, "@timestamp" => "2018-04-22T09:46:22.000+0100"))
-          @filter.filter(event("message" => "Log message", UID_FIELD => uid, "@timestamp" => "2018-04-22T09:46:21.000+0100"))
-          insist { @filter.transactions.size } == 1
-          insist { @filter.transactions[uid].a } != nil
-          insist { @filter.transactions[uid].b } != nil
-          insist { @filter.transactions[uid].diff } == 1.0
+          @filter.filter(event("message" => "Log message", UID_FIELD => uid, "@timestamp" => "2018-04-22T09:46:21.000+0100"))do | new_event |
+            insist { new_event } != nil
+            insist { new_event.get("tags").include?("TransactionTime") }
+            insist { new_event.get("transaction_time") } == 1.0
+          end
+          insist { @filter.transactions.size } == 0
+          insist { @filter.transactions[uid] } == nil
         end
         it "the TransactionTime have been calculated with ms presicion" do
           @filter.filter(event("message" => "Log message", UID_FIELD => uid, "@timestamp" => "2018-04-22T09:46:22.000+0100"))
-          @filter.filter(event("message" => "Log message", UID_FIELD => uid, "@timestamp" => "2018-04-22T09:46:21.001+0100"))
-          insist { @filter.transactions.size } == 1
-          insist { @filter.transactions[uid].a } != nil
-          insist { @filter.transactions[uid].b } != nil
-          insist { @filter.transactions[uid].diff } == 0.999
+          @filter.filter(event("message" => "Log message", UID_FIELD => uid, "@timestamp" => "2018-04-22T09:46:21.001+0100")) do | new_event |
+            insist { new_event } != nil
+            insist { new_event.get("tags").include?("TransactionTime") }
+            insist { new_event.get("transaction_time") } == 0.999
+          end
+          insist { @filter.transactions.size } == 0
+          insist { @filter.transactions[uid] } == nil
         end
       end
     end
+  end #end context Testing TransactionTime
+
+  context "Testing flush. " do
+    uid = "D7AF37D9-4F7F-4EFC-B481-06F65F75E8CC"
+    uid2 = "C27BBC4C-6456-4581-982E-7497B4C7E754"
+    describe "Call flush enough times" do
+      it "so that all old transactions are flushed" do
+        @filter.filter(event("message" => "Log message", UID_FIELD => uid, "@timestamp" => "2018-04-22T09:46:22.000+0100"))
+        insist { @filter.transactions.size } == 1
+        @filter.filter(event("message" => "Log message", UID_FIELD => uid2, "@timestamp" => "2018-04-22T09:46:22.000+0100"))
+        insist { @filter.transactions.size } == 2
+        ((TIMEOUT/5)-1).times do
+          @filter.flush()
+        end 
+        insist { @filter.transactions.size } == 2
+        @filter.flush()
+        insist { @filter.transactions.size } == 0
+      end
+      it "but not newer transactions" do
+        @filter.filter(event("message" => "Log message", UID_FIELD => uid, "@timestamp" => "2018-04-22T09:46:22.000+0100"))
+        insist { @filter.transactions.size } == 1
+        ((TIMEOUT/5)-1).times do
+          @filter.flush()
+        end 
+        @filter.filter(event("message" => "Log message", UID_FIELD => uid2, "@timestamp" => "2018-04-22T09:46:22.000+0100"))
+        insist { @filter.transactions.size } == 2
+        @filter.flush()
+        insist { @filter.transactions.size } == 1
+      end
+    end
   end
+
 end
