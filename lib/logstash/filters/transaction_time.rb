@@ -2,10 +2,74 @@
 require "logstash/filters/base"
 require "logstash/namespace"
 
-# This  filter will replace the contents of the default 
-# message field with whatever you specify in the configuration.
+# The TransactionTime filter measures the time between two events in a transaction
 #
-# It is only intended to be used as an .
+# This filter is supposed to be used instead of logstash-filters-elapsed
+# when you know that the order of a transaction cannot be guaranteed.
+# Which is most likely the case if you are using multiple workers and 
+# a big amount of events are entering the pipeline in a rapid manner.
+#
+# # The configuration looks like this:
+# [source,ruby]
+#     filter {
+#       transaction_time {
+#         uid_field => "Transaction-unique field"
+#         timeout => seconds
+#         timestamp_tag => "name of timestamp"
+#         replace_timestamp => ['keep', 'oldest', 'newest']
+#         filter_tag => "transaction tag"
+#         attach_event => ['first','last','oldest','newest','none']
+#       }
+#     }
+#
+#
+# The only required parameter is "uid_field" which is used to identify
+# the events in a transaction. A transaction is concidered complete 
+# when two events with the same UID has been captured. 
+# It is when a transaction completes that the transaction time is calculated.
+# 
+# The timeout parameter determines the maximum length of a transaction. 
+# It is set to 300 (5 minutes) by default. 
+# The transaction will not be recorded if timeout duration is exceeded.
+# The value of this parameter will have an impact on the memory footprint of the plugin.
+#
+# The timestamp_tag parameter may be used to select a specific field in the events to use
+# when calculating the transaction time. The default field is @timestamp.
+# 
+# The new event created when a transaction completes may set its own timestamp (default)
+# to when it completes or it may use the timestamp of one of the events in the transaction.
+# The parameter replace_timestamp is used specify this behaviour.
+#
+# Since this plugin exclusivly calculates the time between events in a transaction,
+# it may be wise to filter out the events that are infact not transactions.
+# This will help reduce both the memory footprint and processing time of this plugin, 
+# especially if the pipeline receives a lot of non-transactional events.
+# You could use grok and/or mutate to apply this filter like this:
+# [source,ruby]
+#     filter {
+#       grok{
+#         match => { "message" => "(?<message_type>.*)\t(?<msgbody>.*)\t+UID:%{UUID:uid}" }
+#       }
+#       if [message_type] in ["MaterialIdentified","Recipe","Result"."ReleaseMaterial"]{
+#         mutate {
+#           add_tag => "Transaction"
+#         }
+#       }
+#       transaction_time {
+#         uid_field => "Transaction-unique field"
+#         filter_tag => "transaction tag"
+#       }
+#     }
+#
+# In the example, grok is used to identify the message_type and then the tag "transaction"
+# is added for a specific set of messages. 
+# This tag is then used in the transaction_time as filter_tag. 
+# Only the messages with this tag will be evaluated.
+#
+# The attach_event parameter can be used to append information from one of the events to the
+# new transaction_time event. The default is to not attach anything. 
+# The memory footprint is kept to a minimum by using the default value.
+
 class LogStash::Filters::TransactionTime < LogStash::Filters::Base
 
   HOST_FIELD = "host"

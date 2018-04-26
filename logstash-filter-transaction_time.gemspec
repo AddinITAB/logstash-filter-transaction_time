@@ -3,7 +3,7 @@ Gem::Specification.new do |s|
   s.version       = '1.0.0'
   s.licenses      = ['Apache-2.0','Apache License (2.0)']
   s.summary       = 'Writes the time difference between two events in a transaction to a new event'
-  s.description   = 'This gem is a Logstash plugin required to be installed on top of the Logstash core pipeline using $LS_HOME/bin/logstash-plugin install gemname. This gem is not a stand-alone program'
+  s.description   = 'This gem is a Logstash plugin required to be installed on top of the Logstash core pipeline using $LS_HOME/bin/logstash-plugin install gemname. This gem is not a stand-alone program. Source-code and documentation available at github: https://github.com/AddinITAB/logstash-filter-transaction_time'
   s.homepage      = 'http://addinit.se/'
   s.authors       = ['Tommy Welleby']
   s.email         = 'tommy.welleby@addinit.se'
