@@ -201,7 +201,7 @@ class LogStash::Filters::TransactionTime::Transaction
   end
 
   def invalidTransaction()
-    return firstTimestamp.nil? || secondTimestamp.nil? || @firstEvent.nil? || @lastEvent.nil?
+    return firstTimestamp.nil? || secondTimestamp.nil?
   end
 
   def calculateDiff()
