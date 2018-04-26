@@ -85,7 +85,7 @@ describe LogStash::Filters::TransactionTime do
     describe "Receiving" do
       uid = "D7AF37D9-4F7F-4EFC-B481-06F65F75E8CC"
       describe "two events with the same UID in cronological order" do
-        it "calculates TransactionTime with second presicion" do
+        it "calculates TransactionTime with last presicion" do
           @filter.filter(event("message" => "Log message", UID_FIELD => uid, "@timestamp" => "2018-04-22T09:46:21.000+0100"))
           @filter.filter(event("message" => "Log message", UID_FIELD => uid, "@timestamp" => "2018-04-22T09:46:22.000+0100")) do | new_event |
             insist { new_event } != nil
@@ -107,7 +107,7 @@ describe LogStash::Filters::TransactionTime do
         end
       end
       describe "two events with the same UID in REVERSED cronological order" do
-        it "calculates TransactionTime with second presicion" do
+        it "calculates TransactionTime with last presicion" do
           @filter.filter(event("message" => "Log message", UID_FIELD => uid, "@timestamp" => "2018-04-22T09:46:22.000+0100"))
           @filter.filter(event("message" => "Log message", UID_FIELD => uid, "@timestamp" => "2018-04-22T09:46:21.000+0100"))do | new_event |
             insist { new_event } != nil
@@ -227,18 +227,90 @@ describe LogStash::Filters::TransactionTime do
 
 
   context "Testing attach_event." do
-    uid = "D7AF37D9-4F7F-4EFC-B481-06F65F75E8CC"
-    uid2 = "58C8B705-49C5-4269-92D9-2C959599534C"
-    describe "create tests for attach_event" do
-      describe "only two tagged with specified 'filter_tag'" do
-        it "registers only two transactions" do
-          config = {"filter_tag" => 'transaction'}
+    uid = "9ACCA7B7-D0E9-4E52-A023-9D588E5BE42C"
+    describe "Config attach_event" do
+      describe "with 'first'" do
+        it "attaches info from first event in transaction" do
+          config = {"attach_event" => 'first'}
           @config.merge!(config)
 
           @filter = LogStash::Filters::TransactionTime.new(@config)
           @filter.register
 
-          insist { true } == false
+          @filter.filter(event("message" => "first", UID_FIELD => uid, "@timestamp" => "2018-04-22T09:46:22.000+0100"))
+          @filter.filter(event("message" => "last", UID_FIELD => uid, "@timestamp" => "2018-04-22T09:46:22.100+0100")) do | new_event |
+            insist { new_event } != nil
+            insist { new_event.get("tags").include?("TransactionTime") }
+            insist { new_event.get("message") } != nil
+            insist { new_event.get("message") } == "first"
+          end
+        end
+      end
+      describe "with 'last'" do
+        it "attaches info from last event in transaction" do
+          config = {"attach_event" => 'last'}
+          @config.merge!(config)
+
+          @filter = LogStash::Filters::TransactionTime.new(@config)
+          @filter.register
+
+          @filter.filter(event("message" => "first", UID_FIELD => uid, "@timestamp" => "2018-04-22T09:46:22.000+0100"))
+          @filter.filter(event("message" => "last", UID_FIELD => uid, "@timestamp" => "2018-04-22T09:46:22.100+0100")) do | new_event |
+            insist { new_event } != nil
+            insist { new_event.get("tags").include?("TransactionTime") }
+            insist { new_event.get("message") } != nil
+            insist { new_event.get("message") } == "last"
+          end
+        end
+      end
+      describe "with 'oldest'" do
+        it "attaches info from oldest event in transaction" do
+          config = {"attach_event" => 'oldest'}
+          @config.merge!(config)
+
+          @filter = LogStash::Filters::TransactionTime.new(@config)
+          @filter.register
+
+          @filter.filter(event("message" => "oldest", UID_FIELD => uid, "@timestamp" => "2018-04-22T09:46:22.000+0100"))
+          @filter.filter(event("message" => "newest", UID_FIELD => uid, "@timestamp" => "2018-04-22T09:46:22.100+0100")) do | new_event |
+            insist { new_event } != nil
+            insist { new_event.get("tags").include?("TransactionTime") }
+            insist { new_event.get("message") } != nil
+            insist { new_event.get("message") } == "oldest"
+          end
+        end
+      end
+      describe "with 'newest'" do
+        it "attaches info from newest event in transaction" do
+          config = {"attach_event" => 'newest'}
+          @config.merge!(config)
+
+          @filter = LogStash::Filters::TransactionTime.new(@config)
+          @filter.register
+
+          @filter.filter(event("message" => "oldest", UID_FIELD => uid, "@timestamp" => "2018-04-22T09:46:22.000+0100"))
+          @filter.filter(event("message" => "newest", UID_FIELD => uid, "@timestamp" => "2018-04-22T09:46:22.100+0100")) do | new_event |
+            insist { new_event } != nil
+            insist { new_event.get("tags").include?("TransactionTime") }
+            insist { new_event.get("message") } != nil
+            insist { new_event.get("message") } == "newest"
+          end
+        end
+      end
+      describe "with 'none'" do
+        it "attaches no info from any event in transaction" do
+          config = {"attach_event" => 'none'}
+          @config.merge!(config)
+
+          @filter = LogStash::Filters::TransactionTime.new(@config)
+          @filter.register
+
+          @filter.filter(event("message" => "oldest", UID_FIELD => uid, "@timestamp" => "2018-04-22T09:46:22.000+0100"))
+          @filter.filter(event("message" => "newest", UID_FIELD => uid, "@timestamp" => "2018-04-22T09:46:22.100+0100")) do | new_event |
+            insist { new_event } != nil
+            insist { new_event.get("tags").include?("TransactionTime") }
+            insist { new_event.get("message") } == nil
+          end
         end
       end
     end

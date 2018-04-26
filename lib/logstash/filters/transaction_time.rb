@@ -28,7 +28,7 @@ class LogStash::Filters::TransactionTime < LogStash::Filters::Base
   config :filter_tag, :validate => :string
   # Whether or not to attach one or none of the events in a transaction to the output event. 
   # Defaults to 'none' - which reduces memory footprint by not adding the event to the transactionlist.
-  config :attach_event, :validate => ['first','second','oldest','newest','none'], :default => 'none'
+  config :attach_event, :validate => ['first','last','oldest','newest','none'], :default => 'none'
 
   public
   def register
