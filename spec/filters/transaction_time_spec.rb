@@ -24,7 +24,7 @@ describe LogStash::Filters::TransactionTime do
       expect(subject.get('timestamp_tag')).to eq('testing')
     end
 
-    sample("uid_field" => "some text") do
+    sample("uid_field" => "uid") do
       expect(subject).to include("uid_field")
       expect(subject.get('uid_field')).to eq('uid')
     end

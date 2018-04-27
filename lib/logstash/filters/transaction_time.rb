@@ -56,8 +56,8 @@ require "logstash/namespace"
 #         }
 #       }
 #       transaction_time {
-#         uid_field => "Transaction-unique field"
-#         filter_tag => "transaction tag"
+#         uid_field => "UID"
+#         filter_tag => "Transaction"
 #       }
 #     }
 #
@@ -65,6 +65,8 @@ require "logstash/namespace"
 # is added for a specific set of messages. 
 # This tag is then used in the transaction_time as filter_tag. 
 # Only the messages with this tag will be evaluated.
+# Note: Do not use reserved name "TransactionTime" 
+#       which is added to all events created by this plugin
 #
 # The attach_event parameter can be used to append information from one of the events to the
 # new transaction_time event. The default is to not attach anything. 
@@ -89,6 +91,7 @@ class LogStash::Filters::TransactionTime < LogStash::Filters::Base
   # Override the new events timestamp with the oldest or newest timestamp or keep the new one (set when logstash has processed the event)
   config :replace_timestamp, :validate => ['keep', 'oldest', 'newest'], :default => 'keep'
   # Tag used to identify transactional events. If set, only events tagged with the specified tag attached will be concidered transactions and be processed by the plugin
+  # Do not use reserved tag name "TransactionTime"
   config :filter_tag, :validate => :string
   # Whether or not to attach one or none of the events in a transaction to the output event. 
   # Defaults to 'none' - which reduces memory footprint by not adding the event to the transactionlist.
@@ -118,10 +121,15 @@ class LogStash::Filters::TransactionTime < LogStash::Filters::Base
 
     @logger.debug("Received UID", uid: uid)
 
-    if (@filter_tag.nil? || (!event.get("tags").nil? && event.get("tags").include?(@filter_tag)))
+    #Dont use filter-plugin on events created by this filter-plugin
+    #Dont use filter on anything else but events with the filter_tag if specified
+    if (!uid.nil? && (event.get("tags").nil? || !event.get("tags").include?(TRANSACTION_TIME_TAG)) &&
+      (@filter_tag.nil? || (!event.get("tags").nil? && event.get("tags").include?(@filter_tag))))
+      filter_matched(event) 
       @mutex.synchronize do
         if(!@transactions.has_key?(uid))
           @transactions[uid] = LogStash::Filters::TransactionTime::Transaction.new(event, uid, @storeEvent)
+
         else #End of transaction
           @transactions[uid].addSecond(event,@storeEvent)
           transaction_event = new_transactiontime_event(@transactions[uid])
@@ -132,10 +140,6 @@ class LogStash::Filters::TransactionTime < LogStash::Filters::Base
       end
     end
 
-    event.set("uid_field", @uid_field)
-
-    # filter_matched should go in the last line of our successful code
-    filter_matched(event)
   end # def filter
 
 
@@ -173,33 +177,36 @@ class LogStash::Filters::TransactionTime < LogStash::Filters::Base
   end
 
   def new_transactiontime_event(transaction)
+
+
       case @attach_event
       when 'oldest'
-        event = transaction.getOldestEvent()
+        transaction_event = transaction.getOldestEvent()
       when 'first'
-        event = transaction.firstEvent
+        transaction_event = transaction.firstEvent
       when 'newest'
-        event = transaction.getNewestEvent()
+        transaction_event = transaction.getNewestEvent()
       when 'last'
-        event = transaction.lastEvent
-      else 
-        event = LogStash::Event.new
+        transaction_event = transaction.lastEvent
+      else
+        transaction_event = LogStash::Event.new
       end
-      event.set(HOST_FIELD, Socket.gethostname)
+      transaction_event.set(HOST_FIELD, Socket.gethostname)
 
-      event.tag(TRANSACTION_TIME_TAG)
-      event.set(TRANSACTION_TIME_FIELD, transaction.diff)
-      event.set(TRANSACTION_UID_FIELD, transaction.uid)
-      event.set(TIMESTAMP_START_FIELD, transaction.getOldestTimestamp())
+
+      transaction_event.tag(TRANSACTION_TIME_TAG)
+      transaction_event.set(TRANSACTION_TIME_FIELD, transaction.diff)
+      transaction_event.set(TRANSACTION_UID_FIELD, transaction.uid)
+      transaction_event.set(TIMESTAMP_START_FIELD, transaction.getOldestTimestamp())
 
       if(@replace_timestamp.eql?'oldest')
-        event.set("@timestamp", transaction.getOldestTimestamp())
+        transaction_event.set("@timestamp", transaction.getOldestTimestamp())
       elsif (@replace_timestamp.eql?'newest')
-        event.set("@timestamp", transaction.getNewestTimestamp())
+        transaction_event.set("@timestamp", transaction.getNewestTimestamp())
       end
           
 
-      return event
+      return transaction_event
   end
 
 
