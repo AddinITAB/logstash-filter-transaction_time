@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    logstash-filter-transaction_time (1.0.2)
+    logstash-filter-transaction_time (1.0.3)
       logstash-core-plugin-api (~> 2.0)
 
 GEM
