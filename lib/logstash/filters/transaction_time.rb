@@ -2,12 +2,16 @@
 require "logstash/filters/base"
 require "logstash/namespace"
 
-# The TransactionTime filter measures the time between two events in a transaction
+# The TransactionTime filter measures the time between two events in a transaction.
+# Per default it creates a new event when the transaction time is successfully calculated
+# but it is possible to configure it to decorate an event in the transaction with the 
+# calculated transaction time instead (Like the default-behaviour of logstash-filter-elapsed).
 #
-# This filter is supposed to be used instead of logstash-filters-elapsed
-# when you know that the order of a transaction cannot be guaranteed.
-# Which is most likely the case if you are using multiple workers and 
-# a big amount of events are entering the pipeline in a rapid manner.
+# This filter is supposed to be used instead of logstash-filter-elapsed when you know that 
+# the order of a transaction cannot be guaranteed. Which is most likely the case if you are 
+# using multiple workers and a big amount of events are entering the pipeline in a rapid manner.
+# The input-filter used in a pipeline may also affect the order of events, 
+# even if only one worker is used.
 #
 # # The configuration looks like this:
 # [source,ruby]
@@ -19,6 +23,7 @@ require "logstash/namespace"
 #         replace_timestamp => ['keep', 'oldest', 'newest']
 #         filter_tag => "transaction tag"
 #         attach_event => ['first','last','oldest','newest','none']
+#         decorate_event => ['first','last','oldest','newest','none']
 #       }
 #     }
 #
@@ -71,6 +76,17 @@ require "logstash/namespace"
 # The attach_event parameter can be used to append information from one of the events to the
 # new transaction_time event. The default is to not attach anything. 
 # The memory footprint is kept to a minimum by using the default value.
+# The attach_event parameter cannot be used together with the decorate_event parameter and vice verca.
+#
+# The decorate_event should be used if an event in the transaction should be decorated 
+# with the transaction time, instead of generating a new event when the transaction is completed.
+# This option will cause the plugin to "hold" events until the transactions are completed.
+# If for example the decorate_event is set to 'oldest' - the plugin will not let the first event
+# pass the filter until the transaction is completed and it may be determined if the event is infact
+# the newest or the oldest. When the transaction is completed, both the first and the last event
+# will be "released" and one of them (in this example, the oldest) will be decorated with 
+# a field called "transaction_time" assigned with the caluclated transaction time.
+# The decorate_event parameter cannot be used together with the attach_event parameter and vice verca.
 
 class LogStash::Filters::TransactionTime < LogStash::Filters::Base
 
@@ -95,7 +111,12 @@ class LogStash::Filters::TransactionTime < LogStash::Filters::Base
   config :filter_tag, :validate => :string
   # Whether or not to attach one or none of the events in a transaction to the output event. 
   # Defaults to 'none' - which reduces memory footprint by not adding the event to the transactionlist.
+  # Cannot be used together with 'decorate_event'
   config :attach_event, :validate => ['first','last','oldest','newest','none'], :default => 'none'
+  # Whether or not to decorate an event in the transaction with the transaction time instead of createing a new event.
+  # Defaults to 'none' - which reduces memory footprint by not adding the event to the transactionlist.
+  # Cannot be used together with 'attach_event'
+  config :decorate_event, :validate => ['first','last','oldest','newest','none'], :default => 'none'
 
   public
   def register
