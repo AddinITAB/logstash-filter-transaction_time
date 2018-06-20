@@ -19,6 +19,7 @@ require "logstash/namespace"
 #         replace_timestamp => ['keep', 'oldest', 'newest']
 #         filter_tag => "transaction tag"
 #         attach_event => ['first','last','oldest','newest','none']
+#         release_expired => [true,false]
 #       }
 #     }
 #
@@ -71,11 +72,16 @@ require "logstash/namespace"
 # The attach_event parameter can be used to append information from one of the events to the
 # new transaction_time event. The default is to not attach anything. 
 # The memory footprint is kept to a minimum by using the default value.
+#
+# The release_expired parameter determines if the first event in an expired transactions 
+# should be released or not. Defaults to true
+
 
 class LogStash::Filters::TransactionTime < LogStash::Filters::Base
 
   HOST_FIELD = "host"
   TRANSACTION_TIME_TAG = "TransactionTime"
+  TRANSACTION_TIME_EXPIRED_TAG = "TransactionTimeExpired"
   TRANSACTION_TIME_FIELD = "transaction_time"
   TRANSACTION_UID_FIELD = "transaction_uid"
   TIMESTAMP_START_FIELD = "timestamp_start"
@@ -96,6 +102,8 @@ class LogStash::Filters::TransactionTime < LogStash::Filters::Base
   # Whether or not to attach one or none of the events in a transaction to the output event. 
   # Defaults to 'none' - which reduces memory footprint by not adding the event to the transactionlist.
   config :attach_event, :validate => ['first','last','oldest','newest','none'], :default => 'none'
+  # Wheter or not to release the first event in expired transactions
+  config :release_expired, :validate => :boolean, :default => true
 
   public
   def register
@@ -104,6 +112,8 @@ class LogStash::Filters::TransactionTime < LogStash::Filters::Base
     @mutex = Mutex.new
     @storeEvent = !(@attach_event.eql?"none")
     @@timestampTag = @timestamp_tag
+    @logger.info("Setting up INFO")
+    @logger.debug("Setting up DEBUG")
   end # def register
 
   def transactions
@@ -121,11 +131,14 @@ class LogStash::Filters::TransactionTime < LogStash::Filters::Base
 
     @logger.debug("Received UID", uid: uid)
 
+
     #Dont use filter-plugin on events created by this filter-plugin
     #Dont use filter on anything else but events with the filter_tag if specified
-    if (!uid.nil? && (event.get("tags").nil? || !event.get("tags").include?(TRANSACTION_TIME_TAG)) &&
+    if (!uid.nil? && (event.get("tags").nil? || !event.get("tags").include?(TRANSACTION_TIME_TAG)) && 
+      (event.get("tags").nil? || !event.get("tags").include?(TRANSACTION_TIME_EXPIRED_TAG)) &&
       (@filter_tag.nil? || (!event.get("tags").nil? && event.get("tags").include?(@filter_tag))))
-      filter_matched(event) 
+      
+
       @mutex.synchronize do
         if(!@transactions.has_key?(uid))
           @transactions[uid] = LogStash::Filters::TransactionTime::Transaction.new(event, uid, @storeEvent)
@@ -139,6 +152,9 @@ class LogStash::Filters::TransactionTime < LogStash::Filters::Base
         end
       end
     end
+    #Always forward original event
+    filter_matched(event) 
+    return event
 
   end # def filter
 
@@ -146,12 +162,17 @@ class LogStash::Filters::TransactionTime < LogStash::Filters::Base
   # The method is invoked by LogStash every 5 seconds.
   def flush(options = {})
     expired_elements = []
-
+    @logger.info("FLUSH")
     @mutex.synchronize do
       increment_age_by(5)
       expired_elements = remove_expired_elements()
     end
 
+    expired_elements.each do |element|
+      filter_matched(element)
+    end
+    return expired_elements
+    #yield expired_elements if block_given?
     #return create_expired_events_from(expired_elements)
   end
 
@@ -162,13 +183,15 @@ class LogStash::Filters::TransactionTime < LogStash::Filters::Base
     end
   end
 
-  # Remove the expired "start events" from the internal
+  # Remove the expired "events" from the internal
   # buffer and return them.
   def remove_expired_elements()
     expired = []
     @transactions.delete_if do |key, transaction|
       if(transaction.age >= @timeout)
-        expired << transaction
+        #print("Deleting expired_elements")
+        transaction.tag(TRANSACTION_TIME_EXPIRED_TAG)
+        (expired << transaction.getEvents()).flatten!
         next true
       end
       next false
@@ -281,5 +304,25 @@ class LogStash::Filters::TransactionTime::Transaction
     end
 
     return getNewestTimestamp() - getOldestTimestamp()
+  end
+
+  def tag(value)
+    if(!firstEvent.nil?)
+      firstEvent.tag(value)
+    end
+    if(!lastEvent.nil?)
+      lastEvent.tag(value)
+    end
+  end
+
+  def getEvents()
+    events = []
+    if(!firstEvent.nil?)
+      events << firstEvent
+    end
+    if(!lastEvent.nil?)
+      events << lastEvent
+    end
+    return events
   end
 end

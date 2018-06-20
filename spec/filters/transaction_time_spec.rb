@@ -147,6 +147,21 @@ describe LogStash::Filters::TransactionTime do
         @filter.flush()
         insist { @filter.transactions.size } == 0
       end
+      it "releases the transactions to output" do
+        @filter.filter(event("message" => "Log message", UID_FIELD => uid, "@timestamp" => "2018-04-22T09:46:22.000+0100"))
+        insist { @filter.transactions.size } == 1
+        @filter.filter(event("message" => "Log message", UID_FIELD => uid2, "@timestamp" => "2018-04-22T09:46:22.000+0100"))
+        insist { @filter.transactions.size } == 2
+        ((TIMEOUT/5)-1).times do
+          @filter.flush()
+        end 
+        counter = 0
+        @filter.flush().each do |event|
+          counter+=1
+          #print(event)
+        end
+        insist { counter } == 2
+      end
       it "does not flush newer transactions" do
         @filter.filter(event("message" => "Log message", UID_FIELD => uid, "@timestamp" => "2018-04-22T09:46:22.000+0100"))
         insist { @filter.transactions.size } == 1
@@ -224,7 +239,6 @@ describe LogStash::Filters::TransactionTime do
       end
     end
   end
-
 
   context "Testing attach_event." do
     uid = "9ACCA7B7-D0E9-4E52-A023-9D588E5BE42C"
