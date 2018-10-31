@@ -377,4 +377,34 @@ describe LogStash::Filters::TransactionTime do
       end
     end
   end
+  context "Testing ignore_uids." do
+    nokUid = "Erroneous UID"
+    uid = "9ACCA7B7-D0E9-4E52-A023-9D588E5BE42C"
+    describe "Config ignore_uids set" do
+      it "will not accept events with specified uid as transactions" do
+        config = {"ignore_uids" => ["Erroneous UID"]}
+        @config.merge!(config)
+
+        @filter = LogStash::Filters::TransactionTime.new(@config)
+        @filter.register
+
+        @filter.filter(event("message" => "first", UID_FIELD => nokUid, "@timestamp" => "2018-04-22T09:46:22.000+0100"))
+        @filter.filter(event("message" => "last", UID_FIELD => nokUid, "@timestamp" => "2018-04-22T09:46:22.100+0100")) do | new_event |
+          insist { new_event } == nil
+        end
+      end
+      it "will accept other events as transactions" do
+        config = {"ignore_uids" => ["Erroneous UID"]}
+        @config.merge!(config)
+
+        @filter = LogStash::Filters::TransactionTime.new(@config)
+        @filter.register
+
+        @filter.filter(event("message" => "first", UID_FIELD => uid, "@timestamp" => "2018-04-22T09:46:22.000+0100"))
+        @filter.filter(event("message" => "last", UID_FIELD => uid, "@timestamp" => "2018-04-22T09:46:22.100+0100")) do | new_event |
+          insist { new_event } != nil
+        end
+      end
+    end
+  end
 end

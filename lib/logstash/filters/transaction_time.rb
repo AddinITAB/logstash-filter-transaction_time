@@ -14,6 +14,7 @@ require "logstash/namespace"
 #     filter {
 #       transaction_time {
 #         uid_field => "Transaction-unique field"
+#         ignore_uid => []
 #         timeout => seconds
 #         timestamp_tag => "name of timestamp"
 #         replace_timestamp => ['keep', 'oldest', 'newest']
@@ -31,6 +32,12 @@ require "logstash/namespace"
 # the events in a transaction. A transaction is concidered complete 
 # when two events with the same UID has been captured. 
 # It is when a transaction completes that the transaction time is calculated.
+#
+# The ignore_uid field takes an array of strings. These strings represent specific UIDs
+# that should be ignored. This can be useful for ignoring parsing errors.
+# Example: 
+#   ignore_uid => ["%{[transactionUID][0]}", ""]
+# Will ignore events having empty string or "%{[transactionUID][0]}" in the uid_field.
 # 
 # The timeout parameter determines the maximum length of a transaction. 
 # It is set to 300 (5 minutes) by default. 
@@ -119,6 +126,8 @@ class LogStash::Filters::TransactionTime < LogStash::Filters::Base
   
   # The name of the UID-field used to identify transaction-pairs
   config :uid_field, :validate => :string, :required => true
+  # Array of UIDs to ignore (useful for ignoring parse-errors).
+  config :ignore_uids, :validate => :array, :default => []
   # The amount of time (in seconds) before a transaction is dropped. Defaults to 5 minutes
   config :timeout, :validate => :number, :default => 300
   # What tag to use as timestamp when calculating the elapsed transaction time. Defaults to @timestamp
@@ -177,17 +186,18 @@ class LogStash::Filters::TransactionTime < LogStash::Filters::Base
       (event.get("tags").nil? || !event.get("tags").include?(TRANSACTION_TIME_EXPIRED_TAG)) &&
       (@filter_tag.nil? || (!event.get("tags").nil? && event.get("tags").include?(@filter_tag))))
       
+      if not @ignore_uids.include?(uid)
+        @mutex.synchronize do
+          if(!@transactions.has_key?(uid))
+            @transactions[uid] = LogStash::Filters::TransactionTime::Transaction.new(event, uid, @storeEvent)
 
-      @mutex.synchronize do
-        if(!@transactions.has_key?(uid))
-          @transactions[uid] = LogStash::Filters::TransactionTime::Transaction.new(event, uid, @storeEvent)
-
-        else #End of transaction
-          @transactions[uid].addSecond(event,@storeEvent)
-          transaction_event = new_transactiontime_event(@transactions[uid], @attachData)
-          filter_matched(transaction_event)
-          yield transaction_event if block_given?
-          @transactions.delete(uid)
+          else #End of transaction
+            @transactions[uid].addSecond(event,@storeEvent)
+            transaction_event = new_transactiontime_event(@transactions[uid], @attachData)
+            filter_matched(transaction_event)
+            yield transaction_event if block_given?
+            @transactions.delete(uid)
+          end
         end
       end
     end
