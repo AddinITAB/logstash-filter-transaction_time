@@ -20,6 +20,9 @@ require "logstash/namespace"
 #         filter_tag => "transaction tag"
 #         attach_event => ['first','last','oldest','newest','none']
 #         release_expired => [true,false]
+#         store_data_oldest => []
+#         store_data_newest => []
+#         periodic_flush => [true,false]
 #       }
 #     }
 #
@@ -75,6 +78,31 @@ require "logstash/namespace"
 #
 # The release_expired parameter determines if the first event in an expired transactions 
 # should be released or not. Defaults to true
+#
+# The parameters store_data_oldest and store_data_newest are both used in order to attach 
+# specific fields from oldest respectively newest event. An example of this could be:
+# 
+#    store_data_oldest => ["@timestamp", "work_unit", "work_center", "message_type"]
+#    store_data_newest => ["@timestamp", "work_unit", "work_center", "message_type"]
+# 
+# Which will result in the genereated transaction event inluding the specified fields from 
+# oldest and newest events in a hashmap named oldest/newest under the hash named "transaction_data"
+# Example of output data:
+# "transaction_data" => {
+#        "oldest" => {
+#            "message_type" => "MaterialIdentified",
+#              "@timestamp" => 2018-10-31T07:36:23.072Z,
+#               "work_unit" => "WT000743",
+#             "work_center" => "WR000046"
+#        },
+#        "newest" => {
+#            "message_type" => "Recipe",
+#              "@timestamp" => 2018-10-31T07:36:28.188Z,
+#               "work_unit" => "WT000743",
+#             "work_center" => "WR000046"
+#        }
+#    }
+
 
 
 class LogStash::Filters::TransactionTime < LogStash::Filters::Base
@@ -106,7 +134,7 @@ class LogStash::Filters::TransactionTime < LogStash::Filters::Base
   # Wheter or not to release the first event in expired transactions
   config :release_expired, :validate => :boolean, :default => true
 
-  # Store data from the oldest message. Specify hash of keys to store.
+  # Store data from the oldest message. Specify array of keys to store.
   config :store_data_oldest, :validate => :array, :default => []
   # Store data from the newest message. Specify array of keys to store
   config :store_data_newest, :validate => :array, :default => []
