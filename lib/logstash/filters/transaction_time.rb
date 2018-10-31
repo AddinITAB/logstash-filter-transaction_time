@@ -81,6 +81,7 @@ class LogStash::Filters::TransactionTime < LogStash::Filters::Base
 
   HOST_FIELD = "host"
   TRANSACTION_TIME_TAG = "TransactionTime"
+  TRANSACTION_TIME_DATA = "transaction_data"
   TRANSACTION_TIME_EXPIRED_TAG = "TransactionTimeExpired"
   TRANSACTION_TIME_FIELD = "transaction_time"
   TRANSACTION_UID_FIELD = "transaction_uid"
@@ -105,12 +106,22 @@ class LogStash::Filters::TransactionTime < LogStash::Filters::Base
   # Wheter or not to release the first event in expired transactions
   config :release_expired, :validate => :boolean, :default => true
 
+  # Store data from the oldest message. Specify hash of keys to store.
+  config :store_data_oldest, :validate => :array, :default => []
+  # Store data from the newest message. Specify array of keys to store
+  config :store_data_newest, :validate => :array, :default => []
+
+  # This filter must have its flush function called periodically to be able to purge
+  # expired stored start events.
+  config :periodic_flush, :validate => :boolean, :default => true
+
   public
   def register
     # Add instance variables 
     @transactions = Hash.new
     @mutex = Mutex.new
-    @storeEvent = !(@attach_event.eql?"none")
+    @attachData = (!@store_data_oldest.nil? && @store_data_oldest.any?) || (!@store_data_newest.nil? && @store_data_newest.any?)
+    @storeEvent = (!(@attach_event.eql?"none") || @attachData)
     @@timestampTag = @timestamp_tag
     @logger.info("Setting up INFO")
     @logger.debug("Setting up DEBUG")
@@ -145,7 +156,7 @@ class LogStash::Filters::TransactionTime < LogStash::Filters::Base
 
         else #End of transaction
           @transactions[uid].addSecond(event,@storeEvent)
-          transaction_event = new_transactiontime_event(@transactions[uid])
+          transaction_event = new_transactiontime_event(@transactions[uid], @attachData)
           filter_matched(transaction_event)
           yield transaction_event if block_given?
           @transactions.delete(uid)
@@ -162,7 +173,7 @@ class LogStash::Filters::TransactionTime < LogStash::Filters::Base
   # The method is invoked by LogStash every 5 seconds.
   def flush(options = {})
     expired_elements = []
-    @logger.info("FLUSH")
+    #@logger.info("FLUSH")
     @mutex.synchronize do
       increment_age_by(5)
       expired_elements = remove_expired_elements()
@@ -199,7 +210,7 @@ class LogStash::Filters::TransactionTime < LogStash::Filters::Base
     return expired
   end
 
-  def new_transactiontime_event(transaction)
+  def new_transactiontime_event(transaction, attachData)
 
 
       case @attach_event
@@ -222,12 +233,17 @@ class LogStash::Filters::TransactionTime < LogStash::Filters::Base
       transaction_event.set(TRANSACTION_UID_FIELD, transaction.uid)
       transaction_event.set(TIMESTAMP_START_FIELD, transaction.getOldestTimestamp())
 
+      #Attach transaction data if any
+      if(attachData)
+        transaction_data = transaction.getData(store_data_oldest,store_data_newest)
+        transaction_event.set(TRANSACTION_TIME_DATA,transaction_data)
+      end
+
       if(@replace_timestamp.eql?'oldest')
         transaction_event.set("@timestamp", transaction.getOldestTimestamp())
       elsif (@replace_timestamp.eql?'newest')
         transaction_event.set("@timestamp", transaction.getNewestTimestamp())
       end
-          
 
       return transaction_event
   end
@@ -242,7 +258,7 @@ end # class LogStash::Filters::TransactionTime
 
 
 class LogStash::Filters::TransactionTime::Transaction
-  attr_accessor :firstEvent, :lastEvent,:firstTimestamp, :secondTimestamp, :uid, :age, :diff
+  attr_accessor :firstEvent, :lastEvent,:firstTimestamp, :secondTimestamp, :uid, :age, :diff, :data
 
   def initialize(firstEvent, uid, storeEvent = false)
     if(storeEvent)
@@ -251,6 +267,33 @@ class LogStash::Filters::TransactionTime::Transaction
     @firstTimestamp = firstEvent.get(LogStash::Filters::TransactionTime.timestampTag)
     @uid = uid
     @age = 0
+  end
+
+  def getData(oldestKeys, newestKeys)
+    if(oldestKeys.any?)
+      storeData("oldest",oldestKeys,getOldestEvent())
+    end
+    if(newestKeys.any?)
+      storeData("newest",newestKeys,getNewestEvent())
+    end
+    return @data
+  end
+
+  def storeData(subDataName, dataKeys, dataEvent)
+    if(@data.nil?)
+      @data = Hash.new
+    end
+
+    if(@data[subDataName].nil?)
+      hashData = Hash.new
+    else
+      hashData = @data.get(subDataName)
+    end
+
+    dataKeys.each do |dataKey|
+      hashData[dataKey] = dataEvent.get(dataKey)
+      @data[subDataName] = hashData
+    end
   end
 
   def addSecond(lastEvent,storeEvent = false)

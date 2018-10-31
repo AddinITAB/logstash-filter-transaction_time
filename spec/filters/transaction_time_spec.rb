@@ -5,6 +5,7 @@ require "logstash/filters/transaction_time"
 
 describe LogStash::Filters::TransactionTime do
   UID_FIELD = "uniqueIdField"
+
   TIMEOUT = 30
 
 
@@ -330,4 +331,50 @@ describe LogStash::Filters::TransactionTime do
     end
   end
 
+  context "Testing store_data." do
+    uid = "9ACCA7B7-D0E9-4E52-A023-9D588E5BE42C"
+    describe "Config store_data_oldest" do
+      it "attaches data from oldest event into transaction" do
+        config = {"store_data_oldest" => ["datafield1"]}
+        @config.merge!(config)
+
+        @filter = LogStash::Filters::TransactionTime.new(@config)
+        @filter.register
+
+        @filter.filter(event("message" => "first", UID_FIELD => uid, "@timestamp" => "2018-04-22T09:46:22.000+0100", "datafield1" => "OldestData"))
+        @filter.filter(event("message" => "last", UID_FIELD => uid, "@timestamp" => "2018-04-22T09:46:22.100+0100", "datafield1" => "NewestData")) do | new_event |
+          insist { new_event } != nil
+          insist { new_event.get("tags").include?("TransactionTime") }
+          insist { new_event.get("message") } != nil
+          insist { new_event.get("message") } == "first"
+          insist { new_event.get("transaction_data") } != nil
+          insist { new_event.get("transaction_data")["oldest"]["datafield1"] } != nil
+          insist { new_event.get("transaction_data")["oldest"]["datafield1"] } == "OldestData"
+        end
+      end
+
+      describe "and store_data_newest" do
+        it "attaches data from both newest and oldest event into transaction" do
+          config = {"store_data_newest" => ["datafield1"], "store_data_oldest" => ["datafield1"]}
+          @config.merge!(config)
+
+          @filter = LogStash::Filters::TransactionTime.new(@config)
+          @filter.register
+
+          @filter.filter(event("message" => "first", UID_FIELD => uid, "@timestamp" => "2018-04-22T09:46:22.000+0100", "datafield1" => "OldestData"))
+          @filter.filter(event("message" => "last", UID_FIELD => uid, "@timestamp" => "2018-04-22T09:46:22.100+0100", "datafield1" => "NewestData")) do | new_event |
+            insist { new_event } != nil
+            insist { new_event.get("tags").include?("TransactionTime") }
+            insist { new_event.get("message") } != nil
+            insist { new_event.get("message") } == "first"
+            insist { new_event.get("transaction_data") } != nil
+            insist { new_event.get("transaction_data")["newest"]["datafield1"] } != nil
+            insist { new_event.get("transaction_data")["newest"]["datafield1"] } == "NewestData"
+            insist { new_event.get("transaction_data")["oldest"]["datafield1"] } != nil
+            insist { new_event.get("transaction_data")["oldest"]["datafield1"] } == "OldestData"
+          end
+        end
+      end
+    end
+  end
 end
