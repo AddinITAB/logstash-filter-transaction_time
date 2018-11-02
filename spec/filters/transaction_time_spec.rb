@@ -175,6 +175,26 @@ describe LogStash::Filters::TransactionTime do
         insist { @filter.transactions.size } == 1
       end
     end
+    describe "Setup release_expired = false" do
+      it "never releases any expired events when flush is called" do
+        config = {"release_expired" => false}
+        @config.merge!(config)
+
+        @filter.filter(event("message" => "Log message", UID_FIELD => uid, "@timestamp" => "2018-04-22T09:46:22.000+0100"))
+        insist { @filter.transactions.size } == 1
+        @filter.filter(event("message" => "Log message", UID_FIELD => uid2, "@timestamp" => "2018-04-22T09:46:22.000+0100"))
+        insist { @filter.transactions.size } == 2
+
+        #Looks like flush doesn't have config-scope. Setting release_expired hard instead of by config. Will it work like intended when using only config?
+        @filter.release_expired = false
+        ((TIMEOUT/5)+1).times do
+          flushRes = @filter.flush({"from" => "test" })
+          insist { (flushRes.any?) } == false
+          #insist { @filter.flush().nil? }
+        end 
+        insist { @filter.transactions.size } == 0
+      end
+    end
   end
 
   context "Testing Timestamp Override." do
@@ -184,6 +204,7 @@ describe LogStash::Filters::TransactionTime do
         it "sets the timestamp to the oldest" do
           config = {"replace_timestamp" => 'oldest'}
           @config.merge!(config)
+
 
           @filter = LogStash::Filters::TransactionTime.new(@config)
           @filter.register

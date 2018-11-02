@@ -217,10 +217,14 @@ class LogStash::Filters::TransactionTime < LogStash::Filters::Base
       expired_elements = remove_expired_elements()
     end
 
-    expired_elements.each do |element|
-      filter_matched(element)
+    if @release_expired
+      expired_elements.each do |element|
+        filter_matched(element)
+      end
+      #print("Exp" + options.to_s + expired_elements.to_s)
+      return expired_elements
     end
-    return expired_elements
+    return []
     #yield expired_elements if block_given?
     #return create_expired_events_from(expired_elements)
   end
