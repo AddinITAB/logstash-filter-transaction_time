@@ -349,6 +349,38 @@ describe LogStash::Filters::TransactionTime do
           end
         end
       end
+      describe "with 'newest' when timestamps are equal" do
+        it "attaches info from the first event in transaction" do
+          config = {"attach_event" => 'newest'}
+          @config.merge!(config)
+
+          @filter = LogStash::Filters::TransactionTime.new(@config)
+          @filter.register
+
+          @filter.filter(event("message" => "first", UID_FIELD => uid, "@timestamp" => "2019-01-23T09:46:22.000+0100"))
+          @filter.filter(event("message" => "second", UID_FIELD => uid, "@timestamp" => "2019-01-23T09:46:22.000+0100")) do | new_event |
+            insist { new_event } != nil
+            insist { new_event.get("tags").include?("TransactionTime") }
+            insist { new_event.get("message") } == "first"
+          end
+        end
+      end
+      describe "with 'oldest' when timestamps are equal" do
+        it "attaches info from the second event in transaction" do
+          config = {"attach_event" => 'oldest'}
+          @config.merge!(config)
+
+          @filter = LogStash::Filters::TransactionTime.new(@config)
+          @filter.register
+
+          @filter.filter(event("message" => "first", UID_FIELD => uid, "@timestamp" => "2019-01-23T09:46:22.000+0100"))
+          @filter.filter(event("message" => "second", UID_FIELD => uid, "@timestamp" => "2019-01-23T09:46:22.000+0100")) do | new_event |
+            insist { new_event } != nil
+            insist { new_event.get("tags").include?("TransactionTime") }
+            insist { new_event.get("message") } == "second"
+          end
+        end
+      end
     end
   end
 

@@ -346,7 +346,8 @@ class LogStash::Filters::TransactionTime::Transaction
     @diff = calculateDiff()
   end
 
-  #Gets the first (based on timestamp) event
+  #Gets the oldest (based on timestamp) event
+  #Or the second if they are equal
   def getOldestEvent() 
     if invalidTransaction()
       return nil
@@ -363,12 +364,13 @@ class LogStash::Filters::TransactionTime::Transaction
     return [@firstTimestamp,@secondTimestamp].min
   end
 
-  #Gets the last (based on timestamp) event
+  #Gets the newest (based on timestamp) event
+  #Or the first if they are equal
   def getNewestEvent() 
     if invalidTransaction()
       return nil
     end
-    if(@firstTimestamp > @secondTimestamp)
+    if(@firstTimestamp >= @secondTimestamp)
       return @firstEvent
     else
       return @lastEvent
