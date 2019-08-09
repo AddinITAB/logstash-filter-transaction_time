@@ -194,7 +194,9 @@ class LogStash::Filters::TransactionTime < LogStash::Filters::Base
           else #End of transaction
             @transactions[uid].addSecond(event,@storeEvent)
             transaction_event = new_transactiontime_event(@transactions[uid], @attachData)
-            filter_matched(transaction_event)
+            if (@attach_event.eql?"none") # raise new log event iff data was not attached (avoid duplicates)
+                filter_matched(transaction_event)
+            end
             yield transaction_event if block_given?
             @transactions.delete(uid)
           end
